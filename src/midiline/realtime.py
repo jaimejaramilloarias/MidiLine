@@ -50,7 +50,6 @@ class RealTimeProcessor:
         self.pitch_o.set_silence(silence)
         self.pitch_o.set_tolerance(tolerance)
         self.pitch_tolerance = float(tolerance)
-        self.onset_o = aubio.onset("default", buffer_size * 2, buffer_size, samplerate)
 
         self.history = deque(maxlen=history_size)
         self.amp_threshold = amp_threshold
@@ -99,29 +98,36 @@ class RealTimeProcessor:
         else:
             self.onset_count = 0
 
-        if self.onset_o(samples)[0] > 0 and should_trigger:
+        if self.onset_count >= self.onset_frames and should_trigger:
             note = int(round(smoothed_pitch))
             bend = int(np.clip((smoothed_pitch - note) * 8192, -8192, 8191))
             velocity = int(
                 np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
             )
+            self.onset_count = 0
             self.release_count = 0
-            if self.last_note is not None:
+            if self.last_note is None or note != self.last_note:
+                if self.last_note is not None:
+                    self.out_port.send(
+                        mido.Message(
+                            "note_off",
+                            note=self.last_note,
+                            velocity=0,
+                            channel=self.channel,
+                        )
+                    )
+                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
                 self.out_port.send(
                     mido.Message(
-                        "note_off", note=self.last_note, velocity=0, channel=self.channel
+                        "note_on",
+                        note=note,
+                        velocity=velocity,
+                        channel=self.channel,
                     )
                 )
-            self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
-            self.out_port.send(
-                mido.Message(
-                    "note_on",
-                    note=note,
-                    velocity=velocity,
-                    channel=self.channel,
-                )
-            )
-            self.last_note = note
+                self.last_note = note
+            else:
+                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
         else:
             if self.last_note is not None and should_trigger:
                 bend = int(np.clip((smoothed_pitch - self.last_note) * 8192, -8192, 8191))
