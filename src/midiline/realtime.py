@@ -44,13 +44,13 @@ class RealTimeProcessor:
         gate_release: int = 10,
         onset_frames: int = 2,
         silence: float = -40.0,
-        debug: bool = False,
     ) -> None:
         self.pitch_o = aubio.pitch("yin", buffer_size * 2, buffer_size, samplerate)
         self.pitch_o.set_unit("midi")
         self.pitch_o.set_silence(silence)
         self.pitch_o.set_tolerance(tolerance)
         self.pitch_tolerance = float(tolerance)
+        self.onset_o = aubio.onset("default", buffer_size * 2, buffer_size, samplerate)
 
         self.history = deque(maxlen=history_size)
         self.amp_threshold = amp_threshold
@@ -64,7 +64,6 @@ class RealTimeProcessor:
             if gate_threshold > 0.0
             else None
         )
-        self.debug = debug
         self.onset_frames = max(1, int(onset_frames))
         self.onset_count = 0
 
@@ -100,39 +99,33 @@ class RealTimeProcessor:
         else:
             self.onset_count = 0
 
-        if self.debug:
-            print(
-                f"amp={amplitude:.4f} pitch={pitch:.2f} conf={confidence:.2f} smooth={smoothed_pitch:.2f}",
-                flush=True,
-            )
-
-        if self.onset_count >= self.onset_frames and should_trigger:
+        if self.onset_o(samples)[0] > 0 and should_trigger:
             note = int(round(smoothed_pitch))
+            bend = int(np.clip((smoothed_pitch - note) * 8192, -8192, 8191))
             velocity = int(
                 np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
             )
             self.release_count = 0
-            if note != self.last_note:
-                if self.last_note is not None:
-                    self.out_port.send(
-                        mido.Message(
-                            "note_off", note=self.last_note, velocity=0, channel=self.channel
-                        )
-                    )
-                    if self.debug:
-                        print(f"note_off {self.last_note}", flush=True)
+            if self.last_note is not None:
                 self.out_port.send(
                     mido.Message(
-                        "note_on",
-                        note=note,
-                        velocity=velocity,
-                        channel=self.channel,
+                        "note_off", note=self.last_note, velocity=0, channel=self.channel
                     )
                 )
-                if self.debug:
-                    print(f"note_on {note} vel={velocity}", flush=True)
-                self.last_note = note
+            self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
+            self.out_port.send(
+                mido.Message(
+                    "note_on",
+                    note=note,
+                    velocity=velocity,
+                    channel=self.channel,
+                )
+            )
+            self.last_note = note
         else:
+            if self.last_note is not None and should_trigger:
+                bend = int(np.clip((smoothed_pitch - self.last_note) * 8192, -8192, 8191))
+                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
             if amplitude <= self.amp_threshold:
                 self.release_count += 1
             else:
