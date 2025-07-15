@@ -2,6 +2,58 @@ import numpy as np
 from scipy.signal import medfilt
 
 
+class FastYin:
+    """Stateful YIN pitch detector with minimal allocations."""
+
+    def __init__(self, frame_size: int, sr: int, threshold: float = 0.1) -> None:
+        self.sr = sr
+        self.threshold = float(threshold)
+        self.frame_size = frame_size
+        self.max_tau = frame_size // 2
+        self.diffs = np.zeros(self.max_tau, dtype=np.float32)
+        self.cmnd = np.zeros(self.max_tau, dtype=np.float32)
+
+    def __call__(self, frame: np.ndarray) -> float:
+        frame = np.asarray(frame, dtype=np.float32)
+        if len(frame) < self.frame_size:
+            frame = np.pad(frame, (0, self.frame_size - len(frame)))
+        else:
+            frame = frame[: self.frame_size]
+
+        max_tau = self.max_tau
+        diffs = self.diffs
+        for tau in range(1, max_tau):
+            delta = frame[:max_tau] - frame[tau : tau + max_tau]
+            diffs[tau] = float(np.dot(delta, delta))
+
+        cmnd = self.cmnd
+        cmnd[0] = 1.0
+        running_sum = 0.0
+        for tau in range(1, max_tau):
+            running_sum += diffs[tau]
+            cmnd[tau] = diffs[tau] * tau / running_sum if running_sum != 0 else 1.0
+
+        tau_est = 0
+        for i in range(1, max_tau - 1):
+            if cmnd[i] < self.threshold and cmnd[i] <= cmnd[i + 1]:
+                tau_est = i
+                break
+
+        if tau_est == 0:
+            tau_est = int(np.argmin(cmnd[1:]) + 1)
+        if tau_est == 0:
+            return 0.0
+
+        better_tau = float(tau_est)
+        if 1 <= tau_est < max_tau - 1:
+            x0, x1, x2 = cmnd[tau_est - 1], cmnd[tau_est], cmnd[tau_est + 1]
+            denom = 2 * (2 * x1 - x2 - x0)
+            if denom != 0:
+                better_tau = tau_est + (x2 - x0) / denom
+
+        return float(self.sr) / better_tau
+
+
 def yin(frame: np.ndarray, sr: int, threshold: float = 0.1) -> float:
     """Estimate fundamental frequency of an audio frame using the YIN algorithm.
 

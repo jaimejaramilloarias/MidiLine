@@ -1,9 +1,8 @@
 import numpy as np
 import mido
-import aubio
-from collections import deque
 
 from .preprocess import highpass_filter
+from .pitch_detection import FastYin
 
 
 class NoiseGate:
@@ -32,10 +31,9 @@ class RealTimeProcessor:
         midi_port: str = "MidiLine",
         buffer_size: int = 1024,
         samplerate: int = 44100,
-        tolerance: float = 0.8,
+        pitch_threshold: float = 0.1,
         amp_threshold: float = 0.01,
-        history_size: int = 3,
-        release_frames: int = 5,
+        release_frames: int = 3,
         cutoff: float | None = None,
         velocity: int = 64,
         channel: int = 0,
@@ -43,18 +41,12 @@ class RealTimeProcessor:
         gate_attack: int = 2,
         gate_release: int = 10,
         onset_frames: int = 2,
-        silence: float = -40.0,
     ) -> None:
-        self.pitch_o = aubio.pitch("yin", buffer_size * 2, buffer_size, samplerate)
-        self.pitch_o.set_unit("Hz")
-        self.pitch_o.set_silence(silence)
-        self.pitch_o.set_tolerance(tolerance)
-        # Detect pitches down to roughly D2 (~73 Hz)
+        self.detector = FastYin(buffer_size * 2, samplerate, threshold=pitch_threshold)
+        self.smoothing = 0.4
+        self.smoothed_pitch = 0.0
         self.min_freq = 60.0
         self.max_freq = 10000.0
-        self.pitch_tolerance = float(tolerance)
-
-        self.history = deque(maxlen=history_size)
         self.amp_threshold = amp_threshold
         self.release_frames = release_frames
         self.cutoff = cutoff
@@ -83,74 +75,62 @@ class RealTimeProcessor:
             samples = highpass_filter(samples, self.cutoff, self.samplerate)
         if self.gate:
             samples = self.gate.process(samples)
-        # Efficient RMS computation without allocating intermediate arrays
+
         amplitude = float(np.sqrt(np.dot(samples, samples) / len(samples)))
-        pitch = self.pitch_o(samples)[0]
-        confidence = self.pitch_o.get_confidence()
-
-        if self.min_freq <= pitch <= self.max_freq:
-            self.history.append(pitch)
+        pitch = float(self.detector(samples))
+        if pitch > 0.0:
+            self.smoothed_pitch = (
+                self.smoothing * pitch + (1.0 - self.smoothing) * self.smoothed_pitch
+            )
         else:
-            self.history.append(0.0)
-        smoothed_pitch = float(np.median(self.history))
-        should_trigger = (
-            amplitude > self.amp_threshold
-            and self.min_freq <= pitch <= self.max_freq
-            and confidence >= self.pitch_tolerance
-        )
+            self.smoothed_pitch *= 1.0 - self.smoothing
 
-        if should_trigger:
+        in_range = self.min_freq <= self.smoothed_pitch <= self.max_freq
+        active = amplitude > self.amp_threshold and in_range
+
+        if active:
             self.onset_count += 1
         else:
             self.onset_count = 0
 
-        if self.onset_count >= self.onset_frames and should_trigger:
-            if smoothed_pitch > 0 and np.isfinite(smoothed_pitch):
-                midi_note = int(
-                    round(69 + 12 * np.log2(smoothed_pitch / 440.0))
-                )
-            else:
-                midi_note = None
-
-            if midi_note is not None:
-                velocity = int(
-                    np.clip(
-                        amplitude / self.amp_threshold * self.velocity, 1, 127
-                    )
-                )
-                self.onset_count = 0
-                self.release_count = 0
-                if self.last_note is None or midi_note != self.last_note:
-                    if self.last_note is not None:
-                        self.out_port.send(
-                            mido.Message(
-                                "note_off",
-                                note=self.last_note,
-                                velocity=0,
-                                channel=self.channel,
-                            )
-                        )
+        if self.onset_count >= self.onset_frames and active:
+            midi_note = int(round(69 + 12 * np.log2(self.smoothed_pitch / 440.0)))
+            velocity = int(
+                np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
+            )
+            self.onset_count = 0
+            self.release_count = 0
+            if self.last_note is None or midi_note != self.last_note:
+                if self.last_note is not None:
                     self.out_port.send(
                         mido.Message(
-                            "note_on",
-                            note=midi_note,
-                            velocity=velocity,
+                            "note_off",
+                            note=self.last_note,
+                            velocity=0,
                             channel=self.channel,
                         )
                     )
-                    self.last_note = midi_note
+                self.out_port.send(
+                    mido.Message(
+                        "note_on",
+                        note=midi_note,
+                        velocity=velocity,
+                        channel=self.channel,
+                    )
+                )
+                self.last_note = midi_note
         else:
             if amplitude <= self.amp_threshold:
                 self.release_count += 1
             else:
-                # Don't cut the note if the signal is loud but pitch detection
-                # momentarily fails. Reset the release counter in that case so
-                # the note sustains smoothly.
                 self.release_count = 0
             if self.last_note is not None and self.release_count >= self.release_frames:
                 self.out_port.send(
                     mido.Message(
-                        "note_off", note=self.last_note, velocity=0, channel=self.channel
+                        "note_off",
+                        note=self.last_note,
+                        velocity=0,
+                        channel=self.channel,
                     )
                 )
                 self.last_note = None
