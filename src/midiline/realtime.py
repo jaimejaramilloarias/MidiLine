@@ -42,6 +42,8 @@ class RealTimeProcessor:
         gate_threshold: float = 0.0,
         gate_attack: int = 2,
         gate_release: int = 10,
+        onset_frames: int = 2,
+        debug: bool = False,
     ) -> None:
         self.pitch_o = aubio.pitch("yin", buffer_size * 2, buffer_size, samplerate)
         self.pitch_o.set_unit("midi")
@@ -61,6 +63,9 @@ class RealTimeProcessor:
             if gate_threshold > 0.0
             else None
         )
+        self.debug = debug
+        self.onset_frames = max(1, int(onset_frames))
+        self.onset_count = 0
 
         try:
             self.out_port = mido.open_output(midi_port, virtual=True)
@@ -83,12 +88,24 @@ class RealTimeProcessor:
 
         self.history.append(pitch)
         smoothed_pitch = float(np.median(self.history))
-
-        if (
+        should_trigger = (
             amplitude > self.amp_threshold
             and pitch > 0
             and confidence >= self.pitch_tolerance
-        ):
+        )
+
+        if should_trigger:
+            self.onset_count += 1
+        else:
+            self.onset_count = 0
+
+        if self.debug:
+            print(
+                f"amp={amplitude:.4f} pitch={pitch:.2f} conf={confidence:.2f} smooth={smoothed_pitch:.2f}",
+                flush=True,
+            )
+
+        if self.onset_count >= self.onset_frames and should_trigger:
             note = int(round(smoothed_pitch))
             velocity = int(
                 np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
@@ -101,6 +118,8 @@ class RealTimeProcessor:
                             "note_off", note=self.last_note, velocity=0, channel=self.channel
                         )
                     )
+                    if self.debug:
+                        print(f"note_off {self.last_note}", flush=True)
                 self.out_port.send(
                     mido.Message(
                         "note_on",
@@ -109,6 +128,8 @@ class RealTimeProcessor:
                         channel=self.channel,
                     )
                 )
+                if self.debug:
+                    print(f"note_on {note} vel={velocity}", flush=True)
                 self.last_note = note
         else:
             if amplitude <= self.amp_threshold:

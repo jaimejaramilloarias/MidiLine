@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QComboBox,
     QLineEdit,
+    QCheckBox,
 )
 from PyQt5.QtCore import Qt
 
@@ -35,6 +36,7 @@ class RecorderThread(threading.Thread):
         gate_threshold=0.0,
         gate_attack=2,
         gate_release=10,
+        debug=False,
     ):
         super().__init__(daemon=True)
         self.device = device
@@ -51,6 +53,7 @@ class RecorderThread(threading.Thread):
         self.gate_threshold = gate_threshold
         self.gate_attack = gate_attack
         self.gate_release = gate_release
+        self.debug = debug
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -70,6 +73,7 @@ class RecorderThread(threading.Thread):
             gate_threshold=self.gate_threshold,
             gate_attack=self.gate_attack,
             gate_release=self.gate_release,
+            debug=self.debug,
         )
 
         def callback(indata, frames, time, status):
@@ -107,19 +111,19 @@ class MidiLineGUI(QWidget):
         dev_layout.addWidget(self.device_combo)
         layout.addLayout(dev_layout)
 
-        # Buffer size knob
+        # Buffer size dropdown
         buf_layout = QHBoxLayout()
-        buf_layout.addWidget(QLabel('Buffer'))
-        self.buffer_dial = QDial()
-        self.buffer_dial.setRange(64, 512)
-        self.buffer_dial.setValue(256)
-        self.buffer_dial.setNotchesVisible(True)
-        buf_layout.addWidget(self.buffer_dial)
+        buf_layout.addWidget(QLabel('Buffer (samples)'))
+        self.buffer_combo = QComboBox()
+        for size in [64, 128, 256, 512]:
+            self.buffer_combo.addItem(f"{size}", size)
+        self.buffer_combo.setCurrentIndex(2)
+        buf_layout.addWidget(self.buffer_combo)
         layout.addLayout(buf_layout)
 
         # Amplitude threshold slider
         amp_layout = QHBoxLayout()
-        amp_layout.addWidget(QLabel('Amplitud'))
+        amp_layout.addWidget(QLabel('Amplitud (%)'))
         self.amp_slider = QSlider(Qt.Horizontal)
         self.amp_slider.setRange(1, 100)
         self.amp_slider.setValue(1)
@@ -128,7 +132,7 @@ class MidiLineGUI(QWidget):
 
         # Noise gate threshold slider
         gate_layout = QHBoxLayout()
-        gate_layout.addWidget(QLabel('NoiseGate'))
+        gate_layout.addWidget(QLabel('NoiseGate (%)'))
         self.gate_slider = QSlider(Qt.Horizontal)
         self.gate_slider.setRange(0, 100)
         self.gate_slider.setValue(0)
@@ -136,13 +140,13 @@ class MidiLineGUI(QWidget):
         layout.addLayout(gate_layout)
 
         gate_time = QHBoxLayout()
-        gate_time.addWidget(QLabel('Ataque'))
+        gate_time.addWidget(QLabel('Ataque (frames)'))
         self.gate_attack_dial = QDial()
         self.gate_attack_dial.setRange(1, 20)
         self.gate_attack_dial.setValue(2)
         self.gate_attack_dial.setNotchesVisible(True)
         gate_time.addWidget(self.gate_attack_dial)
-        gate_time.addWidget(QLabel('Release'))
+        gate_time.addWidget(QLabel('Release (frames)'))
         self.gate_release_dial = QDial()
         self.gate_release_dial.setRange(1, 50)
         self.gate_release_dial.setValue(10)
@@ -152,26 +156,25 @@ class MidiLineGUI(QWidget):
 
         # Tolerance slider
         tol_layout = QHBoxLayout()
-        tol_layout.addWidget(QLabel('Tolerancia'))
+        tol_layout.addWidget(QLabel('Tolerancia (%)'))
         self.tol_slider = QSlider(Qt.Horizontal)
         self.tol_slider.setRange(50, 100)
         self.tol_slider.setValue(80)
         tol_layout.addWidget(self.tol_slider)
         layout.addLayout(tol_layout)
 
-        # Sample rate knob
+        # Sample rate dropdown
         sr_layout = QHBoxLayout()
-        sr_layout.addWidget(QLabel('SampleRate'))
-        self.sr_dial = QDial()
-        self.sr_dial.setRange(22050, 96000)
-        self.sr_dial.setValue(44100)
-        self.sr_dial.setNotchesVisible(True)
-        sr_layout.addWidget(self.sr_dial)
+        sr_layout.addWidget(QLabel('SampleRate (Hz)'))
+        self.sr_combo = QComboBox()
+        self.sr_combo.addItem('44100', 44100)
+        self.sr_combo.addItem('48000', 48000)
+        sr_layout.addWidget(self.sr_combo)
         layout.addLayout(sr_layout)
 
         # Frame size knob
         frame_layout = QHBoxLayout()
-        frame_layout.addWidget(QLabel('Frame'))
+        frame_layout.addWidget(QLabel('Frame (samples)'))
         self.frame_dial = QDial()
         self.frame_dial.setRange(512, 4096)
         self.frame_dial.setValue(2048)
@@ -181,7 +184,7 @@ class MidiLineGUI(QWidget):
 
         # Low-pass cutoff knob
         cutoff_layout = QHBoxLayout()
-        cutoff_layout.addWidget(QLabel('LowPass'))
+        cutoff_layout.addWidget(QLabel('LowPass (Hz)'))
         self.cutoff_dial = QDial()
         self.cutoff_dial.setRange(1000, 12000)
         self.cutoff_dial.setValue(6000)
@@ -191,7 +194,7 @@ class MidiLineGUI(QWidget):
 
         # Velocity knob
         vel_layout = QHBoxLayout()
-        vel_layout.addWidget(QLabel('Velocidad'))
+        vel_layout.addWidget(QLabel('Velocidad (1-127)'))
         self.velocity_dial = QDial()
         self.velocity_dial.setRange(1, 127)
         self.velocity_dial.setValue(64)
@@ -201,7 +204,7 @@ class MidiLineGUI(QWidget):
 
         # Channel knob
         ch_layout = QHBoxLayout()
-        ch_layout.addWidget(QLabel('Canal'))
+        ch_layout.addWidget(QLabel('Canal (0-15)'))
         self.channel_dial = QDial()
         self.channel_dial.setRange(0, 15)
         self.channel_dial.setValue(0)
@@ -211,7 +214,7 @@ class MidiLineGUI(QWidget):
 
         # Silence slider
         silence_layout = QHBoxLayout()
-        silence_layout.addWidget(QLabel('Silencio dB'))
+        silence_layout.addWidget(QLabel('Silencio (dB)'))
         self.silence_slider = QSlider(Qt.Horizontal)
         self.silence_slider.setRange(0, 80)
         self.silence_slider.setValue(40)
@@ -224,6 +227,10 @@ class MidiLineGUI(QWidget):
         self.port_edit = QLineEdit('MidiLine')
         port_layout.addWidget(self.port_edit)
         layout.addLayout(port_layout)
+
+        # Debug checkbox
+        self.debug_check = QCheckBox('Debug')
+        layout.addWidget(self.debug_check)
 
         # Start/Stop button
         self.btn = QPushButton('Iniciar')
@@ -243,10 +250,10 @@ class MidiLineGUI(QWidget):
             self.btn.setText('Iniciar')
         else:
             device = self.device_combo.currentData()
-            buffer_size = self.buffer_dial.value()
+            buffer_size = self.buffer_combo.currentData()
             amp_threshold = self.amp_slider.value() / 100.0
             tolerance = self.tol_slider.value() / 100.0
-            samplerate = self.sr_dial.value()
+            samplerate = self.sr_combo.currentData()
             frame_size = self.frame_dial.value()
             cutoff = self.cutoff_dial.value()
             velocity = self.velocity_dial.value()
@@ -256,6 +263,7 @@ class MidiLineGUI(QWidget):
             gate_attack = self.gate_attack_dial.value()
             gate_release = self.gate_release_dial.value()
             port = self.port_edit.text()
+            debug = self.debug_check.isChecked()
             self.worker = RecorderThread(
                 device,
                 buffer_size,
@@ -271,6 +279,7 @@ class MidiLineGUI(QWidget):
                 gate_threshold=gate_threshold,
                 gate_attack=gate_attack,
                 gate_release=gate_release,
+                debug=debug,
             )
             self.worker.start()
             self.btn.setText('Detener')
