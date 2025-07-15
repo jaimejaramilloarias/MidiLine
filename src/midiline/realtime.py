@@ -104,31 +104,40 @@ class RealTimeProcessor:
             self.onset_count = 0
 
         if self.onset_count >= self.onset_frames and should_trigger:
-            midi_note = int(round(69 + 12 * np.log2(smoothed_pitch / 440.0)))
-            velocity = int(
-                np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
-            )
-            self.onset_count = 0
-            self.release_count = 0
-            if self.last_note is None or midi_note != self.last_note:
-                if self.last_note is not None:
+            if smoothed_pitch > 0 and np.isfinite(smoothed_pitch):
+                midi_note = int(
+                    round(69 + 12 * np.log2(smoothed_pitch / 440.0))
+                )
+            else:
+                midi_note = None
+
+            if midi_note is not None:
+                velocity = int(
+                    np.clip(
+                        amplitude / self.amp_threshold * self.velocity, 1, 127
+                    )
+                )
+                self.onset_count = 0
+                self.release_count = 0
+                if self.last_note is None or midi_note != self.last_note:
+                    if self.last_note is not None:
+                        self.out_port.send(
+                            mido.Message(
+                                "note_off",
+                                note=self.last_note,
+                                velocity=0,
+                                channel=self.channel,
+                            )
+                        )
                     self.out_port.send(
                         mido.Message(
-                            "note_off",
-                            note=self.last_note,
-                            velocity=0,
+                            "note_on",
+                            note=midi_note,
+                            velocity=velocity,
                             channel=self.channel,
                         )
                     )
-                self.out_port.send(
-                    mido.Message(
-                        "note_on",
-                        note=midi_note,
-                        velocity=velocity,
-                        channel=self.channel,
-                    )
-                )
-                self.last_note = midi_note
+                    self.last_note = midi_note
         else:
             if amplitude <= self.amp_threshold:
                 self.release_count += 1
