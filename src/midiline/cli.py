@@ -17,7 +17,8 @@ def cli():
               help='Umbral de amplitud para detectar notas')
 @click.option('--tolerance', default=0.8, type=float,
               help='Tolerancia de detección de tono (aubio)')
-def record(input_device, buffer_size, midi_port, amp_threshold, tolerance):
+@click.option('--debug', is_flag=True, help='Imprime información de depuración')
+def record(input_device, buffer_size, midi_port, amp_threshold, tolerance, debug):
     """Captura audio y envía notas MIDI en tiempo real."""
     samplerate = 44100
     pitch_o = aubio.pitch('yin', buffer_size * 2, buffer_size, samplerate)
@@ -38,6 +39,8 @@ def record(input_device, buffer_size, midi_port, amp_threshold, tolerance):
         amplitude = float(np.sqrt(np.mean(samples ** 2)))
         pitch = pitch_o(samples)[0]
         confidence = pitch_o.get_confidence()
+        if debug:
+            print(f"amp={amplitude:.4f} pitch={pitch:.2f} conf={confidence:.2f}")
         if (
             pitch > 0
             and amplitude > amp_threshold

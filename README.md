@@ -19,6 +19,8 @@ pip install .
 
 Esto instalará todas las dependencias y habilitará el comando `midiline`.
 
+Consulta `docs/install_mac.md` para ver un ejemplo de instalación en macOS.
+
 ## Uso
 
 El comando principal es `record`, que abre un puerto MIDI virtual y comienza a
