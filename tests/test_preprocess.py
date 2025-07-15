@@ -18,17 +18,17 @@ def test_frame_audio_shape():
     assert frames.shape == (4, 4)
     assert np.all(frames[0] == np.array([0, 1, 2, 3]))
 
-from src.preprocess import lowpass_filter as lp_root
-from src.midiline.preprocess import lowpass_filter as lp_pkg
+from src.preprocess import highpass_filter as hp_root
+from src.midiline.preprocess import highpass_filter as hp_pkg
 
 
-def test_lowpass_filter_preserves_dtype_root():
+def test_highpass_filter_preserves_dtype_root():
     audio = np.random.rand(1024).astype(np.float32)
-    filt = lp_root(audio, cutoff=1000, fs=44100)
+    filt = hp_root(audio, cutoff=1000, fs=44100)
     assert filt.dtype == np.float32
 
 
-def test_lowpass_filter_preserves_dtype_pkg():
+def test_highpass_filter_preserves_dtype_pkg():
     audio = np.random.rand(1024).astype(np.float32)
-    filt = lp_pkg(audio, cutoff=1000, fs=44100)
+    filt = hp_pkg(audio, cutoff=1000, fs=44100)
     assert filt.dtype == np.float32

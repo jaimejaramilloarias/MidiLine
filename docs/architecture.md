@@ -7,8 +7,7 @@ MidiLine es una aplicación modular diseñada inicialmente para la detección de
 - **Implementación inicial:** Utilizar una biblioteca multiplataforma como PortAudio para manejar distintos drivers (ASIO/ALSA/CoreAudio).
 - **Expansión futura:** Soporte para multicanal si se desea procesar entrada estéreo o varias fuentes.
 
-## 2. Preprocesamiento
-- **Normalización y filtrado:** Ajuste de ganancia y filtrado de ruidos (por ejemplo, paso bajo para eliminar frecuencias por encima de ~10–12 kHz que no suelen estar presentes en la guitarra).
+- **Normalización y filtrado:** Ajuste de ganancia y filtrado de ruidos (por ejemplo, un filtro paso alto ajustable que elimina frecuencias por debajo de 40 Hz).
 - **Segmentación en bloques:** División de la señal en ventanas solapadas (p. ej., 2048 o 4096 muestras) para análisis en tiempo real.
 
 ## 3. Detección de Pitch (Monofónico)
