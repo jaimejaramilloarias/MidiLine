@@ -12,11 +12,13 @@ def cli():
 @click.option('--input-device', default=None, help='ID o nombre del dispositivo de entrada')
 @click.option('--buffer-size', default=1024, type=int, help='Tamaño del bloque de audio')
 @click.option('--midi-port', default='MidiLine', help='Puerto MIDI de salida')
+@click.option('--input-channel', default=1, type=int, help='Canal del dispositivo de entrada (1-n)')
+@click.option('--midi-channel', default=1, type=int, help='Canal MIDI (1-16)')
 @click.option('--amp-threshold', default=0.01, type=float,
               help='Umbral de amplitud para detectar notas')
 @click.option('--tolerance', default=0.8, type=float,
               help='Tolerancia de detección de tono (aubio)')
-def record(input_device, buffer_size, midi_port, amp_threshold, tolerance):
+def record(input_device, buffer_size, midi_port, input_channel, midi_channel, amp_threshold, tolerance):
     """Captura audio y envía notas MIDI en tiempo real."""
     samplerate = 44100
     processor = RealTimeProcessor(
@@ -25,17 +27,18 @@ def record(input_device, buffer_size, midi_port, amp_threshold, tolerance):
         samplerate=samplerate,
         tolerance=tolerance,
         amp_threshold=amp_threshold,
+        channel=midi_channel - 1,
     )
 
     def callback(indata, frames, time, status):
         if status:
             print(status, flush=True)
-        samples = np.frombuffer(indata, dtype=np.float32)
+        samples = indata[:, input_channel - 1].copy()
         processor.process_block(samples)
 
     with sd.InputStream(
         device=input_device,
-        channels=1,
+        channels=input_channel,
         callback=callback,
         blocksize=buffer_size,
         samplerate=samplerate,
