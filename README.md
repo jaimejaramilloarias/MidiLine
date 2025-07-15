@@ -50,7 +50,8 @@ Desde ella puedes seleccionar el dispositivo de entrada y ajustar parámetros
 de forma avanzada. La ventana incluye diales para el tamaño de buffer,
 la frecuencia de corte del filtro paso alto, la velocidad y el canal MIDI,
 así como controles para la tasa de muestreo, tamaño de frame y
-umbral de silencio.
+umbral de silencio. La captura de audio comienza automáticamente al abrir la
+aplicación y se detiene al cerrar la ventana.
 
 ## Pruebas
 
