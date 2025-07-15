@@ -43,11 +43,12 @@ class RealTimeProcessor:
         gate_attack: int = 2,
         gate_release: int = 10,
         onset_frames: int = 2,
+        silence: float = -40.0,
         debug: bool = False,
     ) -> None:
         self.pitch_o = aubio.pitch("yin", buffer_size * 2, buffer_size, samplerate)
         self.pitch_o.set_unit("midi")
-        self.pitch_o.set_silence(-40)
+        self.pitch_o.set_silence(silence)
         self.pitch_o.set_tolerance(tolerance)
         self.pitch_tolerance = float(tolerance)
 

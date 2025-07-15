@@ -73,6 +73,7 @@ class RecorderThread(threading.Thread):
             gate_threshold=self.gate_threshold,
             gate_attack=self.gate_attack,
             gate_release=self.gate_release,
+            silence=self.silence,
             debug=self.debug,
         )
 
