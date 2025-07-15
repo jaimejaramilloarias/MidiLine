@@ -1,0 +1,3 @@
+# MidiLine package
+
+"""MidiLine package."""

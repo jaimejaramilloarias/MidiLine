@@ -1,0 +1,7 @@
+aubio
+sounddevice
+mido
+click
+numpy
+scipy
+PyQt5
