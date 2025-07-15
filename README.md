@@ -48,7 +48,7 @@ python -m midiline.gui
 
 Desde ella puedes seleccionar el dispositivo de entrada y ajustar parámetros
 de forma avanzada. La ventana incluye diales para el tamaño de buffer,
-la frecuencia de corte del filtro paso bajo, la velocidad y el canal MIDI,
+la frecuencia de corte del filtro paso alto, la velocidad y el canal MIDI,
 así como controles para la tasa de muestreo, tamaño de frame y
 umbral de silencio.
 

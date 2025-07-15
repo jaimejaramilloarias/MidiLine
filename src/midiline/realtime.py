@@ -3,7 +3,7 @@ import mido
 import aubio
 from collections import deque
 
-from .preprocess import lowpass_filter
+from .preprocess import highpass_filter
 
 
 class NoiseGate:
@@ -46,9 +46,11 @@ class RealTimeProcessor:
         silence: float = -40.0,
     ) -> None:
         self.pitch_o = aubio.pitch("yin", buffer_size * 2, buffer_size, samplerate)
-        self.pitch_o.set_unit("midi")
+        self.pitch_o.set_unit("Hz")
         self.pitch_o.set_silence(silence)
         self.pitch_o.set_tolerance(tolerance)
+        self.min_freq = 40.0
+        self.max_freq = 10000.0
         self.pitch_tolerance = float(tolerance)
 
         self.history = deque(maxlen=history_size)
@@ -77,7 +79,7 @@ class RealTimeProcessor:
     def process_block(self, samples: np.ndarray) -> None:
         """Process one block of audio samples."""
         if self.cutoff:
-            samples = lowpass_filter(samples, self.cutoff, self.samplerate)
+            samples = highpass_filter(samples, self.cutoff, self.samplerate)
         if self.gate:
             samples = self.gate.process(samples)
         # Efficient RMS computation without allocating intermediate arrays
@@ -85,11 +87,14 @@ class RealTimeProcessor:
         pitch = self.pitch_o(samples)[0]
         confidence = self.pitch_o.get_confidence()
 
-        self.history.append(pitch)
+        if self.min_freq <= pitch <= self.max_freq:
+            self.history.append(pitch)
+        else:
+            self.history.append(0.0)
         smoothed_pitch = float(np.median(self.history))
         should_trigger = (
             amplitude > self.amp_threshold
-            and pitch > 0
+            and self.min_freq <= pitch <= self.max_freq
             and confidence >= self.pitch_tolerance
         )
 
@@ -99,14 +104,13 @@ class RealTimeProcessor:
             self.onset_count = 0
 
         if self.onset_count >= self.onset_frames and should_trigger:
-            note = int(round(smoothed_pitch))
-            bend = int(np.clip((smoothed_pitch - note) * 8192, -8192, 8191))
+            midi_note = int(round(69 + 12 * np.log2(smoothed_pitch / 440.0)))
             velocity = int(
                 np.clip(amplitude / self.amp_threshold * self.velocity, 1, 127)
             )
             self.onset_count = 0
             self.release_count = 0
-            if self.last_note is None or note != self.last_note:
+            if self.last_note is None or midi_note != self.last_note:
                 if self.last_note is not None:
                     self.out_port.send(
                         mido.Message(
@@ -116,22 +120,16 @@ class RealTimeProcessor:
                             channel=self.channel,
                         )
                     )
-                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
                 self.out_port.send(
                     mido.Message(
                         "note_on",
-                        note=note,
+                        note=midi_note,
                         velocity=velocity,
                         channel=self.channel,
                     )
                 )
-                self.last_note = note
-            else:
-                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
+                self.last_note = midi_note
         else:
-            if self.last_note is not None and should_trigger:
-                bend = int(np.clip((smoothed_pitch - self.last_note) * 8192, -8192, 8191))
-                self.out_port.send(mido.Message("pitchwheel", pitch=bend, channel=self.channel))
             if amplitude <= self.amp_threshold:
                 self.release_count += 1
             else:

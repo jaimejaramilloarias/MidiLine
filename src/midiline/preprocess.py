@@ -17,12 +17,12 @@ def normalize(audio):
     return audio / max_val
 
 
-def lowpass_filter(audio, cutoff, fs=44100, order=5):
-    """Apply a Butterworth low-pass filter preserving float32 precision."""
+def highpass_filter(audio, cutoff, fs=44100, order=5):
+    """Apply a Butterworth high-pass filter preserving float32 precision."""
     audio = np.asarray(audio, dtype=np.float32)
     nyq = 0.5 * fs
     norm_cutoff = cutoff / nyq
-    b, a = butter(order, norm_cutoff, btype='low', analog=False)
+    b, a = butter(order, norm_cutoff, btype='high', analog=False)
     filtered = lfilter(b, a, audio)
     return filtered.astype(np.float32, copy=False)
 
