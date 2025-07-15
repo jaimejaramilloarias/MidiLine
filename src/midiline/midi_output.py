@@ -2,7 +2,7 @@ from typing import Iterable
 import time
 import mido
 
-from events import NoteEvent
+from .events import NoteEvent
 
 class MidiOutput:
     """Send NoteOn/NoteOff messages to a MIDI output port."""
