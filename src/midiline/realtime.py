@@ -34,7 +34,7 @@ class RealTimeProcessor:
         samplerate: int = 44100,
         tolerance: float = 0.8,
         amp_threshold: float = 0.01,
-        history_size: int = 5,
+        history_size: int = 3,
         release_frames: int = 5,
         cutoff: float | None = None,
         velocity: int = 64,
@@ -49,7 +49,8 @@ class RealTimeProcessor:
         self.pitch_o.set_unit("Hz")
         self.pitch_o.set_silence(silence)
         self.pitch_o.set_tolerance(tolerance)
-        self.min_freq = 40.0
+        # Detect pitches down to roughly D2 (~73 Hz)
+        self.min_freq = 60.0
         self.max_freq = 10000.0
         self.pitch_tolerance = float(tolerance)
 

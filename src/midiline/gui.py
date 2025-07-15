@@ -219,11 +219,11 @@ class MidiLineGUI(QWidget):
         cutoff_layout.addWidget(QLabel('HighPass (Hz)'))
         self.cutoff_dial = QDial()
         self.cutoff_dial.setRange(40, 240)
-        self.cutoff_dial.setValue(80)
+        self.cutoff_dial.setValue(60)
         self.cutoff_dial.setNotchesVisible(True)
         self.cutoff_dial.setToolTip('Frecuencia minima que dejara pasar el filtro')
         cutoff_layout.addWidget(self.cutoff_dial)
-        self.cutoff_value = QLabel('80')
+        self.cutoff_value = QLabel('60')
         self.cutoff_dial.valueChanged.connect(lambda v: self.cutoff_value.setText(str(v)))
         cutoff_layout.addWidget(self.cutoff_value)
         layout.addLayout(cutoff_layout)
@@ -277,57 +277,55 @@ class MidiLineGUI(QWidget):
         layout.addLayout(port_layout)
 
 
-        # Start/Stop button
-        self.btn = QPushButton('Iniciar')
-        self.btn.clicked.connect(self.toggle_record)
-        layout.addWidget(self.btn)
-
         self.setLayout(layout)
         # Adjust initial size and reduce width by 20%
         self.adjustSize()
         self.resize(int(self.width() * 0.8), self.height())
 
-    def toggle_record(self):
+        # Start recording automatically
+        self._start_recorder()
+
+    def _start_recorder(self) -> None:
+        """Initialize and start the recording thread."""
+        device = self.device_combo.currentData()
+        buffer_size = self.buffer_combo.currentData()
+        amp_threshold = self.amp_slider.value() / 100.0
+        tolerance = self.tol_slider.value() / 100.0
+        samplerate = self.sr_combo.currentData()
+        frame_size = self.frame_dial.value()
+        cutoff = self.cutoff_dial.value()
+        velocity = self.velocity_dial.value()
+        channel = self.channel_dial.value()
+        silence = -float(self.silence_slider.value())
+        gate_threshold = self.gate_slider.value() / 100.0
+        gate_attack = self.gate_attack_dial.value()
+        gate_release = self.gate_release_dial.value()
+        port = self.port_edit.text()
+        input_channel = self.input_channel_combo.currentData()
+        self.worker = RecorderThread(
+            device,
+            buffer_size,
+            port,
+            amp_threshold,
+            tolerance,
+            samplerate=samplerate,
+            frame_size=frame_size,
+            cutoff=cutoff,
+            velocity=velocity,
+            channel=channel,
+            input_channel=input_channel,
+            silence=silence,
+            gate_threshold=gate_threshold,
+            gate_attack=gate_attack,
+            gate_release=gate_release,
+        )
+        self.worker.start()
+
+    def closeEvent(self, event):
         if self.worker and self.worker.is_alive():
             self.worker.stop()
             self.worker.join()
-            self.worker = None
-            self.btn.setText('Iniciar')
-        else:
-            device = self.device_combo.currentData()
-            buffer_size = self.buffer_combo.currentData()
-            amp_threshold = self.amp_slider.value() / 100.0
-            tolerance = self.tol_slider.value() / 100.0
-            samplerate = self.sr_combo.currentData()
-            frame_size = self.frame_dial.value()
-            cutoff = self.cutoff_dial.value()
-            velocity = self.velocity_dial.value()
-            channel = self.channel_dial.value()
-            silence = -float(self.silence_slider.value())
-            gate_threshold = self.gate_slider.value() / 100.0
-            gate_attack = self.gate_attack_dial.value()
-            gate_release = self.gate_release_dial.value()
-            port = self.port_edit.text()
-            input_channel = self.input_channel_combo.currentData()
-            self.worker = RecorderThread(
-                device,
-                buffer_size,
-                port,
-                amp_threshold,
-                tolerance,
-                samplerate=samplerate,
-                frame_size=frame_size,
-                cutoff=cutoff,
-                velocity=velocity,
-                channel=channel,
-                input_channel=input_channel,
-                silence=silence,
-                gate_threshold=gate_threshold,
-                gate_attack=gate_attack,
-                gate_release=gate_release,
-            )
-            self.worker.start()
-            self.btn.setText('Detener')
+        event.accept()
 
 
 def main():
